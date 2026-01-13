@@ -11,7 +11,7 @@ app.use(express.json());
 // بيانات النتائج
 let scores = { win: 0, loss: 0, rec_win: 0, rec_loss: 0 };
 
-// الإعدادات الافتراضية (مع الخيارات الجديدة)
+// الإعدادات
 let settings = {
     winText: "WIN", lossText: "LOSS",
     winColor: "#00FFFF", lossColor: "#FF0055",
@@ -20,16 +20,12 @@ let settings = {
     fontFamily: "'Cairo', sans-serif",
     labelSize: 30, numSize: 35,
     layout: "row",
-    // خيارات متقدمة جديدة
-    borderWidth: 4,
-    borderRadius: 6,
-    shadowOpacity: 0.5
+    borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
 };
 
 io.on("connection", (socket) => {
     socket.emit("update_scores", { ...scores, event: "sync" });
     socket.emit("update_settings", settings);
-
     socket.on("save_settings", (newSettings) => {
         settings = newSettings;
         io.emit("update_settings", settings);
@@ -38,7 +34,6 @@ io.on("connection", (socket) => {
 
 app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
 
-// API التحكم
 app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
@@ -53,7 +48,10 @@ app.get("/api/set", (req, res) => {
         if (scores.loss > scores.rec_loss) { scores.rec_loss = scores.loss; eventType = "loss_record"; }
     }
     else if (action === "loss_dec") scores.loss = Math.max(0, scores.loss - 1);
+    
+    // --- أوامر التصفير ---
     else if (action === "reset") { scores.win = 0; scores.loss = 0; eventType = "reset"; }
+    else if (action === "reset_records") { scores.rec_win = 0; scores.rec_loss = 0; eventType = "update"; } // هذا هو الجديد
 
     io.emit("update_scores", { ...scores, event: eventType });
     res.json(scores);
