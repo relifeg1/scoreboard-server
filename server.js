@@ -8,10 +8,10 @@ const path = require('path');
 app.use(cors());
 app.use(express.json());
 
-// 1. بيانات النتائج
+// بيانات النتائج
 let scores = { win: 0, loss: 0, rec_win: 0, rec_loss: 0 };
 
-// 2. إعدادات التصميم الافتراضية
+// الإعدادات الافتراضية (مع الخيارات الجديدة)
 let settings = {
     winText: "WIN", lossText: "LOSS",
     winColor: "#00FFFF", lossColor: "#FF0055",
@@ -19,28 +19,26 @@ let settings = {
     width: 200, height: 50, gap: 15,
     fontFamily: "'Cairo', sans-serif",
     labelSize: 30, numSize: 35,
-    layout: "row"
+    layout: "row",
+    // خيارات متقدمة جديدة
+    borderWidth: 4,
+    borderRadius: 6,
+    shadowOpacity: 0.5
 };
 
-// عند اتصال OBS أو لوحة التحكم
 io.on("connection", (socket) => {
-    // إرسال البيانات الحالية فور الاتصال
     socket.emit("update_scores", { ...scores, event: "sync" });
     socket.emit("update_settings", settings);
 
-    // استقبال الإعدادات الجديدة من لوحة التحكم
     socket.on("save_settings", (newSettings) => {
         settings = newSettings;
-        io.emit("update_settings", settings); // تعميم التغيير للكل
+        io.emit("update_settings", settings);
     });
 });
 
-// صفحة لوحة التحكم
-app.get("/admin", (req, res) => {
-    res.sendFile(path.join(__dirname, '/admin.html'));
-});
+app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
 
-// API للستريم ديك
+// API التحكم
 app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
