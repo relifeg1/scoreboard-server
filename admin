@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scoreboard Control Panel</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: white;
+            font-family: sans-serif;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .panel {
+            background: #2b2b2b;
+            padding: 20px;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #444;
+        }
+
+        h2 {
+            color: #00eaff;
+            text-align: center;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .group {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        label {
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            padding: 5px;
+            border-radius: 4px;
+            border: none;
+            background: #444;
+            color: white;
+            width: 120px;
+        }
+
+        input[type="color"] {
+            width: 40px;
+            height: 30px;
+            border: none;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #00eaff;
+            border: none;
+            color: black;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background: #00c4d6;
+        }
+
+        #status {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            color: gray;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="panel">
+        <h2>🎛️ Live Config</h2>
+
+        <div class="group"><label>Win Text</label><input type="text" id="winText"></div>
+        <div class="group"><label>Loss Text</label><input type="text" id="lossText"></div>
+
+        <hr style="border-color:#444">
+
+        <div class="group"><label>Win Color</label><input type="color" id="winColor"></div>
+        <div class="group"><label>Loss Color</label><input type="color" id="lossColor"></div>
+        <div class="group"><label>Background</label><input type="color" id="bgColor"></div>
+        <div class="group"><label>Label Color</label><input type="color" id="labelColor"></div>
+        <div class="group"><label>Number Color</label><input type="color" id="numColor"></div>
+
+        <hr style="border-color:#444">
+
+        <div class="group"><label>Width (px)</label><input type="number" id="width"></div>
+        <div class="group"><label>Height (px)</label><input type="number" id="height"></div>
+        <div class="group"><label>Layout</label>
+            <select id="layout">
+                <option value="row">Horizontal</option>
+                <option value="column">Vertical</option>
+                <option value="rtl">Arabic (RTL)</option>
+            </select>
+        </div>
+
+        <button onclick="saveSettings()">SAVE CHANGES</button>
+        <div id="status">Connecting...</div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // استلام الإعدادات الحالية عند الفتح
+        socket.on('update_settings', (s) => {
+            document.getElementById('winText').value = s.winText;
+            document.getElementById('lossText').value = s.lossText;
+            document.getElementById('winColor').value = s.winColor;
+            document.getElementById('lossColor').value = s.lossColor;
+            document.getElementById('bgColor').value = s.bgColor;
+            document.getElementById('labelColor').value = s.labelColor;
+            document.getElementById('numColor').value = s.numColor;
+            document.getElementById('width').value = s.width;
+            document.getElementById('height').value = s.height;
+            document.getElementById('layout').value = s.layout;
+            document.getElementById('status').innerText = "✅ Synced with Server";
+        });
+
+        // إرسال الإعدادات الجديدة
+        function saveSettings() {
+            const newSettings = {
+                winText: val('winText'), lossText: val('lossText'),
+                winColor: val('winColor'), lossColor: val('lossColor'),
+                bgColor: val('bgColor'), labelColor: val('labelColor'), numColor: val('numColor'),
+                width: val('width'), height: val('height'), layout: val('layout'),
+                gap: 15, fontFamily: "'Cairo', sans-serif", labelSize: 30, numSize: 35
+            };
+            socket.emit('save_settings', newSettings);
+            document.getElementById('status').innerText = "💾 Saved!";
+            setTimeout(() => document.getElementById('status').innerText = "✅ Synced with Server", 2000);
+        }
+
+        function val(id) { return document.getElementById(id).value; }
+    </script>
+</body>
+
+</html>
