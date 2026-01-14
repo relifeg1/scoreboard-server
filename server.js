@@ -121,4 +121,7 @@ app.get("/api/set", (req, res) => {
     res.json(responseData);
 });
 
-app.get("/api/get", (req, res) => { res.json(getResponseData("sync
+app.get("/api/get", (req, res) => { res.json(getResponseData("sync")); });
+
+const port = process.env.PORT || 3000;
+http.listen(port, () => { console.log("Server running on port " + port); });
