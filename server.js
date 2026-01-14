@@ -9,7 +9,7 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// 🔴 رابط قاعدة البيانات
+// 🔴 رابط قاعدة البيانات (JSONBlob) - تأكد أنه الرابط الصحيح
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
 
 let db = {
@@ -22,6 +22,7 @@ let db = {
     }
 };
 
+// تحميل البيانات
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
@@ -39,18 +40,15 @@ let settings = {
     labelSize: 30, numSize: 35, layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
 };
 
-// دالة مساعدة لإنشاء المؤشرات (Indicators)
+// إعداد بيانات الرد (مع المؤشرات)
 function getResponseData(eventType) {
     const current = db.modes[db.activeMode];
-    
-    // هنا السحر: نرسل علامة خاصة للطور المفعل
     const indicators = {
-        "i_1v1": db.activeMode === "1v1" ? "🟢 1v1" : "1v1", // إذا مفعل يضع دائرة خضراء
+        "i_1v1": db.activeMode === "1v1" ? "🟢 1v1" : "1v1",
         "i_2v2": db.activeMode === "2v2" ? "🟢 2v2" : "2v2",
         "i_3v3": db.activeMode === "3v3" ? "🟢 3v3" : "3v3",
         "i_4v4": db.activeMode === "4v4" ? "🟢 4v4" : "4v4"
     };
-
     return { ...current, mode: db.activeMode, indicators: indicators, event: eventType };
 }
 
@@ -66,27 +64,44 @@ app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
     
-    let current = db.modes[db.activeMode];
-
-    if (action.startsWith("set_mode_")) {
+    // التعامل مع الأطوار المحددة (Specific Mode Actions)
+    if (action.startsWith("reset_score_")) {
+        const targetMode = action.replace("reset_score_", ""); // e.g., "1v1"
+        if (db.modes[targetMode]) {
+            db.modes[targetMode].win = 0;
+            db.modes[targetMode].loss = 0;
+            if (targetMode === db.activeMode) eventType = "reset";
+        }
+    }
+    else if (action.startsWith("reset_rank_")) {
+        const targetMode = action.replace("reset_rank_", "");
+        if (db.modes[targetMode]) {
+            db.modes[targetMode].rec_win = 0;
+            db.modes[targetMode].rec_loss = 0;
+        }
+    }
+    else if (action.startsWith("set_mode_")) {
         const newMode = action.replace("set_mode_", "");
         if (db.modes[newMode]) { db.activeMode = newMode; eventType = "mode_change"; }
     }
-    else if (action === "win_inc") {
-        current.win++;
-        if (current.win > current.rec_win) { current.rec_win = current.win; eventType = "win_record"; }
-    } 
-    else if (action === "win_dec") current.win = Math.max(0, current.win - 1);
-    else if (action === "loss_inc") {
-        current.loss++;
-        if (current.loss > current.rec_loss) { current.rec_loss = current.loss; eventType = "loss_record"; }
+    // التعامل مع الطور النشط حالياً (Active Mode Actions)
+    else {
+        let current = db.modes[db.activeMode];
+        if (action === "win_inc") {
+            current.win++;
+            if (current.win > current.rec_win) { current.rec_win = current.win; eventType = "win_record"; }
+        } 
+        else if (action === "win_dec") current.win = Math.max(0, current.win - 1);
+        else if (action === "loss_inc") {
+            current.loss++;
+            if (current.loss > current.rec_loss) { current.rec_loss = current.loss; eventType = "loss_record"; }
+        }
+        else if (action === "loss_dec") current.loss = Math.max(0, current.loss - 1);
+        else if (action === "reset") { current.win = 0; current.loss = 0; eventType = "reset"; }
+        else if (action === "reset_records") { current.rec_win = 0; current.rec_loss = 0; eventType = "update"; }
     }
-    else if (action === "loss_dec") current.loss = Math.max(0, current.loss - 1);
-    else if (action === "reset") { current.win = 0; current.loss = 0; eventType = "reset"; }
-    else if (action === "reset_records") { current.rec_win = 0; current.rec_loss = 0; eventType = "update"; }
 
     saveScores();
-
     const responseData = getResponseData(eventType);
     io.emit("update_scores", responseData);
     res.json(responseData);
