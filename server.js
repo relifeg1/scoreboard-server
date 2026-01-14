@@ -9,43 +9,42 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// ==================================================================
-// 🟢 رابط قاعدة البيانات الخاص بك (تمت إضافته) 🟢
-// ==================================================================
+// ==========================================
+// 🔴 رابط قاعدة البيانات (تأكد أنه صحيح)
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
-// ==================================================================
+// ==========================================
 
-// متغير لتخزين النتائج مؤقتاً
-let scores = { win: 0, loss: 0, rec_win: 0, rec_loss: 0 };
+// الهيكل الجديد للبيانات (4 أطوار)
+let db = {
+    activeMode: "1v1", // الطور الحالي
+    modes: {
+        "1v1": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 },
+        "2v2": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 },
+        "3v3": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 },
+        "4v4": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 }
+    }
+};
 
-// دالة لجلب البيانات المحفوظة عند تشغيل السيرفر
+// تحميل البيانات
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
-        // نتأكد أن البيانات موجودة وصحيحة قبل اعتمادها
-        if (res.data && typeof res.data === 'object') {
-            scores = { ...scores, ...res.data }; // دمج البيانات لضمان عدم فقدان الحقول
-            console.log("✅ Database Loaded Successfully:", scores);
+        if (res.data && res.data.modes) {
+            db = res.data;
+            console.log("✅ DB Loaded. Active Mode:", db.activeMode);
+        } else {
+            // تهيئة أولية إذا كانت الداتا قديمة
+            saveScores();
         }
-    } catch (e) {
-        console.error("❌ Error loading DB (Using default 0):", e.message);
-    }
+    } catch (e) { console.error("Error loading DB"); }
 }
-
-// تحميل البيانات فوراً عند بدء التشغيل
 loadScores();
 
-// دالة لحفظ البيانات (يتم استدعاؤها عند كل تغيير)
 async function saveScores() {
-    try {
-        await axios.put(DB_URL, scores);
-        console.log("💾 Database Saved.");
-    } catch (e) {
-        console.error("❌ Error saving DB:", e.message);
-    }
+    try { await axios.put(DB_URL, db); } catch (e) { console.error("Error saving DB"); }
 }
 
-// إعدادات التصميم الافتراضية
+// الإعدادات (الشكل)
 let settings = {
     winText: "WIN", lossText: "LOSS",
     winColor: "#00FFFF", lossColor: "#FF0055",
@@ -53,75 +52,79 @@ let settings = {
     width: 200, height: 50, gap: 15,
     fontFamily: "'Cairo', sans-serif",
     labelSize: 30, numSize: 35,
-    layout: "row",
-    borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
+    layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
 };
 
-// إعدادات الاتصال (Socket.io)
 io.on("connection", (socket) => {
-    // إرسال أحدث البيانات للمتصل
-    socket.emit("update_scores", { ...scores, event: "sync" });
+    // نرسل للمتصل بيانات الطور الحالي فقط
+    emitUpdate(socket);
     socket.emit("update_settings", settings);
-
-    // استقبال تعديلات التصميم من لوحة التحكم
     socket.on("save_settings", (newSettings) => {
         settings = newSettings;
         io.emit("update_settings", settings);
     });
 });
 
-// توجيه لوحة التحكم
+// دالة مساعدة لإرسال البيانات الصحيحة
+function emitUpdate(socket = io) {
+    const currentData = db.modes[db.activeMode];
+    // نرسل البيانات + اسم الطور الحالي
+    socket.emit("update_scores", { 
+        ...currentData, 
+        mode: db.activeMode, 
+        event: "sync" 
+    });
+}
+
 app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
 
-// API التحكم (للستريم ديك وغيره)
 app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
-
-    if (action === "win_inc") {
-        scores.win++;
-        // التحقق من الرقم القياسي للفوز
-        if (scores.win > scores.rec_win) { 
-            scores.rec_win = scores.win; 
-            eventType = "win_record"; 
-        }
-    } 
-    else if (action === "win_dec") scores.win = Math.max(0, scores.win - 1);
-    else if (action === "loss_inc") {
-        scores.loss++;
-        // التحقق من الرقم القياسي للخسارة
-        if (scores.loss > scores.rec_loss) { 
-            scores.rec_loss = scores.loss; 
-            eventType = "loss_record"; 
-        }
-    }
-    else if (action === "loss_dec") scores.loss = Math.max(0, scores.loss - 1);
     
-    // أوامر التصفير
-    else if (action === "reset") { 
-        scores.win = 0; 
-        scores.loss = 0; 
-        eventType = "reset"; 
-    }
-    else if (action === "reset_records") { 
-        scores.rec_win = 0; 
-        scores.rec_loss = 0; 
-        eventType = "update"; 
-    }
+    // نحدد أي بيانات نعدل عليها بناءً على الطور النشط
+    let current = db.modes[db.activeMode];
 
-    // 🔥 حفظ التغييرات في قاعدة البيانات فوراً
+    // 1. تغيير الطور (Game Mode Switch)
+    if (action.startsWith("set_mode_")) {
+        const newMode = action.replace("set_mode_", ""); // e.g., 2v2
+        if (db.modes[newMode]) {
+            db.activeMode = newMode;
+            eventType = "mode_change"; // حدث خاص لتغيير الطور
+        }
+    }
+    // 2. تعديل النتائج (يعدل الطور النشط فقط)
+    else if (action === "win_inc") {
+        current.win++;
+        if (current.win > current.rec_win) { current.rec_win = current.win; eventType = "win_record"; }
+    } 
+    else if (action === "win_dec") current.win = Math.max(0, current.win - 1);
+    else if (action === "loss_inc") {
+        current.loss++;
+        if (current.loss > current.rec_loss) { current.rec_loss = current.loss; eventType = "loss_record"; }
+    }
+    else if (action === "loss_dec") current.loss = Math.max(0, current.loss - 1);
+    else if (action === "reset") { current.win = 0; current.loss = 0; eventType = "reset"; }
+    else if (action === "reset_records") { current.rec_win = 0; current.rec_loss = 0; eventType = "update"; }
+
     saveScores();
 
-    // إرسال التحديث لجميع المتصلين
-    io.emit("update_scores", { ...scores, event: eventType });
+    // نرسل التحديث للجميع (OBS + StreamDeck)
+    // نرسل بيانات الطور النشط حالياً
+    io.emit("update_scores", { 
+        ...db.modes[db.activeMode], 
+        mode: db.activeMode, 
+        event: eventType 
+    });
     
-    // الرد على الطلب
-    res.json(scores);
+    // رد للستريم ديك (نعطيه بيانات الطور النشط)
+    res.json({ ...db.modes[db.activeMode], activeMode: db.activeMode });
 });
 
-// API لقراءة البيانات فقط
-app.get("/api/get", (req, res) => { res.json(scores); });
+// قراءة البيانات (يعيد بيانات الطور النشط)
+app.get("/api/get", (req, res) => { 
+    res.json({ ...db.modes[db.activeMode], activeMode: db.activeMode }); 
+});
 
-// تشغيل السيرفر
 const port = process.env.PORT || 3000;
 http.listen(port, () => { console.log("Server running on port " + port); });
