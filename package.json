@@ -1,7 +1,7 @@
 {
   "name": "scoreboard-server",
   "version": "1.0.0",
-  "description": "OBS Scoreboard Server with DB",
+  "description": "OBS Scoreboard Server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
