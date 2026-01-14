@@ -7,36 +7,37 @@
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; display: flex; justify-content: center; }
-        .panel { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 100%; max-width: 480px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid #333; }
+        .panel { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 100%; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid #333; }
         
         h2 { color: #00eaff; margin-top: 0; border-bottom: 2px solid #333; padding-bottom: 10px; font-size: 18px; text-align: center; }
-        .section-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px 0; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .section-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 25px 0 10px 0; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; }
 
         /* منطقة الإحصائيات */
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         .stat-card { background: #252525; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; }
         .stat-val { font-size: 24px; font-weight: bold; color: white; }
         .stat-lbl { font-size: 11px; color: #aaa; }
         .record-lbl { font-size: 10px; color: #FFD700; margin-top: 5px; }
+        #activeModeDisplay { text-align: center; color: #00eaff; font-weight: bold; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; }
 
-        /* الأزرار */
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .btn { width: 100%; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 13px; }
-        .btn-save { background: #00eaff; color: #000; width: 100%; margin-top: 20px; font-size: 16px; }
-        .btn-save:hover { transform: scale(1.02); }
-        .btn-reset { background: #2a1a1a; color: #ff4444; border: 1px solid #ff4444; }
-        .btn-reset:hover { background: #ff4444; color: white; }
-        .btn-reset-rec { background: #2a1a1a; color: #FFD700; border: 1px solid #FFD700; } 
-        .btn-reset-rec:hover { background: #FFD700; color: black; }
+        /* أزرار التحكم بالأطوار */
+        .mode-row { display: flex; justify-content: space-between; align-items: center; background: #252525; margin-bottom: 5px; padding: 8px; border-radius: 5px; }
+        .mode-name { font-weight: bold; width: 40px; }
+        .mode-actions button { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; margin-left: 5px; }
+        .btn-set { background: #444; color: white; }
+        .btn-set.active { background: #00eaff; color: black; }
+        .btn-clr-score { background: #2a1a1a; color: #ff4444; border: 1px solid #ff4444; }
+        .btn-clr-rank { background: #2a1a1a; color: #FFD700; border: 1px solid #FFD700; }
 
-        /* المدخلات */
+        /* باقي العناصر */
         .group { margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
         label { font-size: 13px; color: #ccc; }
         input, select { background: #333; border: 1px solid #444; color: white; padding: 6px; border-radius: 4px; }
         input[type="color"] { width: 40px; height: 30px; padding: 0; border: none; cursor: pointer; }
-        input[type="number"] { width: 70px; }
-        input[type="text"] { width: 120px; font-weight: bold; }
+        input[type="number"] { width: 60px; }
+        input[type="text"] { width: 120px; }
         
+        .btn-save { background: #00eaff; color: #000; width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
         #status { text-align: center; margin-top: 15px; font-size: 12px; color: #666; }
     </style>
 </head>
@@ -44,6 +45,8 @@
     <div class="panel">
         <h2>🎛️ COMMAND CENTER</h2>
         
+        <div id="activeModeDisplay">ACTIVE: 1v1</div>
+
         <div class="stats-grid">
             <div class="stat-card" style="border-bottom: 3px solid #00eaff;">
                 <div class="stat-lbl">CURRENT WIN</div><div class="stat-val" id="liveWin">0</div>
@@ -55,93 +58,107 @@
             </div>
         </div>
 
-        <div class="btn-grid">
-            <button class="btn btn-reset" onclick="api('reset')">⚠ RESET SCORES</button>
-            <button class="btn btn-reset-rec" onclick="api('reset_records')">🏆 RESET RECORDS</button>
-        </div>
+        <div class="section-title">🛠️ Mode Manager</div>
+        <div id="modesContainer">
+            </div>
 
-        <div class="section-title">📝 Text & Colors</div>
-        <div class="group"><label>Win Label</label><input type="text" id="winText"></div>
-        <div class="group"><label>Loss Label</label><input type="text" id="lossText"></div>
+        <div class="section-title">🎨 Design & Style</div>
+        <div class="group"><label>Win Text</label><input type="text" id="winText"></div>
+        <div class="group"><label>Loss Text</label><input type="text" id="lossText"></div>
         <div class="group"><label>Win Color</label><input type="color" id="winColor"></div>
         <div class="group"><label>Loss Color</label><input type="color" id="lossColor"></div>
         <div class="group"><label>Background</label><input type="color" id="bgColor"></div>
-        <div class="group"><label>Text Color</label><input type="color" id="labelColor"></div>
-        <div class="group"><label>Number Color</label><input type="color" id="numColor"></div>
-
-        <div class="section-title">📐 Advanced Styling</div>
-        <div class="group"><label>Width (px)</label><input type="number" id="width"></div>
-        <div class="group"><label>Height (px)</label><input type="number" id="height"></div>
-        <div class="group"><label>Border Width</label><input type="number" id="borderWidth" min="0" max="20"></div>
-        <div class="group"><label>Border Radius</label><input type="number" id="borderRadius" min="0" max="50"></div>
-        <div class="group"><label>Shadow Opacity</label><input type="number" id="shadowOpacity" step="0.1" min="0" max="1"></div>
-        <div class="group"><label>Layout Mode</label>
+        <div class="group"><label>Width / Height</label><span><input type="number" id="width"> <input type="number" id="height"></span></div>
+        <div class="group"><label>Border / Radius</label><span><input type="number" id="borderWidth"> <input type="number" id="borderRadius"></span></div>
+        <div class="group"><label>Shadow Opacity</label><input type="number" id="shadowOpacity" step="0.1" max="1"></div>
+        <div class="group"><label>Layout</label>
             <select id="layout">
-                <option value="row">Horizontal (English)</option>
+                <option value="row">Horizontal</option>
                 <option value="column">Vertical</option>
-                <option value="rtl">Horizontal (Arabic)</option>
+                <option value="rtl">Arabic (RTL)</option>
             </select>
         </div>
 
-        <button class="btn btn-save" onclick="saveSettings()">💾 SAVE DESIGN CHANGES</button>
+        <button class="btn-save" onclick="saveSettings()">💾 SAVE CHANGES</button>
         <div id="status">Connecting...</div>
     </div>
 
     <script>
         const socket = io();
+        const modes = ["1v1", "2v2", "3v3", "4v4"];
+        let currentMode = "1v1";
 
-        // 1. تحديث الأرقام الحية
+        // بناء واجهة الأطوار
+        function renderModes() {
+            const container = document.getElementById('modesContainer');
+            container.innerHTML = "";
+            modes.forEach(mode => {
+                const isActive = mode === currentMode;
+                const html = `
+                    <div class="mode-row">
+                        <div class="mode-name" style="${isActive ? 'color:#00eaff':''}">${mode}</div>
+                        <div class="mode-actions">
+                            <button class="btn-set ${isActive ? 'active':''}" onclick="api('set_mode_${mode}')">ACTIVATE</button>
+                            <button class="btn-clr-score" onclick="api('reset_score_${mode}')">0-0</button>
+                            <button class="btn-clr-rank" onclick="api('reset_rank_${mode}')">🏆0</button>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
+
         socket.on('update_scores', (data) => {
             document.getElementById('liveWin').innerText = data.win;
             document.getElementById('liveLoss').innerText = data.loss;
             document.getElementById('recWin').innerText = data.rec_win;
             document.getElementById('recLoss').innerText = data.rec_loss;
+            
+            // تحديث الطور النشط
+            if(data.mode) {
+                currentMode = data.mode;
+                document.getElementById('activeModeDisplay').innerText = "ACTIVE: " + currentMode;
+                renderModes(); // إعادة رسم الأزرار لتحديث الألوان
+            }
         });
 
-        // 2. تحديث الحقول عند فتح الصفحة
         socket.on('update_settings', (s) => {
             setVal('winText', s.winText); setVal('lossText', s.lossText);
             setVal('winColor', s.winColor); setVal('lossColor', s.lossColor);
-            setVal('bgColor', s.bgColor); setVal('labelColor', s.labelColor); setVal('numColor', s.numColor);
-            setVal('width', s.width); setVal('height', s.height);
-            // استرجاع الإعدادات المتقدمة
-            setVal('borderWidth', s.borderWidth !== undefined ? s.borderWidth : 4);
-            setVal('borderRadius', s.borderRadius !== undefined ? s.borderRadius : 6);
-            setVal('shadowOpacity', s.shadowOpacity !== undefined ? s.shadowOpacity : 0.5);
-            setVal('layout', s.layout);
-            
-            document.getElementById('status').innerText = "✅ Connected & Synced";
+            setVal('bgColor', s.bgColor); setVal('width', s.width); setVal('height', s.height);
+            setVal('borderWidth', s.borderWidth); setVal('borderRadius', s.borderRadius);
+            setVal('shadowOpacity', s.shadowOpacity); setVal('layout', s.layout);
+            document.getElementById('status').innerText = "✅ Synced";
         });
 
-        // 3. حفظ الإعدادات
         function saveSettings() {
-            const newSettings = {
+            const s = {
                 winText: getVal('winText'), lossText: getVal('lossText'),
-                winColor: getVal('winColor'), lossColor: getVal('lossColor'),
-                bgColor: getVal('bgColor'), labelColor: getVal('labelColor'), numColor: getVal('numColor'),
+                winColor: getVal('winColor'), lossColor: getVal('lossColor'), bgColor: getVal('bgColor'),
+                labelColor: "#CCCCCC", numColor: "#FFFFFF",
                 width: getVal('width'), height: getVal('height'), layout: getVal('layout'),
-                // حفظ الإعدادات المتقدمة
-                borderWidth: getVal('borderWidth'), 
-                borderRadius: getVal('borderRadius'), 
-                shadowOpacity: getVal('shadowOpacity'),
-                // قيم ثابتة
+                borderWidth: getVal('borderWidth'), borderRadius: getVal('borderRadius'), shadowOpacity: getVal('shadowOpacity'),
                 gap: 15, fontFamily: "'Cairo', sans-serif", labelSize: 30, numSize: 35 
             };
-            socket.emit('save_settings', newSettings);
+            socket.emit('save_settings', s);
             document.getElementById('status').innerText = "💾 Saved!";
-            setTimeout(() => document.getElementById('status').innerText = "✅ Synced", 2000);
         }
 
-        // دالة التصفير
         function api(action) {
-            let msg = action === 'reset' ? "Reset current scores?" : "Reset RECORD history?";
-            if(confirm(msg)) {
-                fetch(`/api/set?action=${action}`);
+            let confirmMsg = "Confirm action?";
+            if(action.includes("reset_score")) confirmMsg = "Reset score to 0-0 for this mode?";
+            if(action.includes("reset_rank")) confirmMsg = "Reset RECORD/RANK for this mode?";
+            
+            if(!action.includes("set_mode")) { // لا تطلب تأكيد عند التفعيل، فقط عند التصفير
+                if(!confirm(confirmMsg)) return;
             }
+            fetch(`/api/set?action=${action}`);
         }
 
         function setVal(id, v) { if(document.getElementById(id)) document.getElementById(id).value = v; }
         function getVal(id) { return document.getElementById(id).value; }
+        
+        renderModes(); // تشغيل أولي
     </script>
 </body>
 </html>
