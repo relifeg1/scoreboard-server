@@ -1,7 +1,7 @@
 {
   "name": "scoreboard-server",
   "version": "1.0.0",
-  "description": "OBS Scoreboard Server",
+  "description": "OBS Scoreboard Server with DB",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,9 +9,10 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "socket.io": "^4.7.2"
+    "socket.io": "^4.7.2",
+    "axios": "^1.6.0"
   },
   "engines": {
-    "node": ">=14.x"
+    "node": ">=18.x"
   }
 }
