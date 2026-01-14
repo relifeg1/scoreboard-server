@@ -9,14 +9,11 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
-// 🔴 رابط قاعدة البيانات (تأكد أنه صحيح)
+// 🔴 رابط قاعدة البيانات
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
-// ==========================================
 
-// الهيكل الجديد للبيانات (4 أطوار)
 let db = {
-    activeMode: "1v1", // الطور الحالي
+    activeMode: "1v1",
     modes: {
         "1v1": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 },
         "2v2": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 },
@@ -25,56 +22,43 @@ let db = {
     }
 };
 
-// تحميل البيانات
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
-        if (res.data && res.data.modes) {
-            db = res.data;
-            console.log("✅ DB Loaded. Active Mode:", db.activeMode);
-        } else {
-            // تهيئة أولية إذا كانت الداتا قديمة
-            saveScores();
-        }
+        if (res.data && res.data.modes) db = res.data;
     } catch (e) { console.error("Error loading DB"); }
 }
 loadScores();
 
-async function saveScores() {
-    try { await axios.put(DB_URL, db); } catch (e) { console.error("Error saving DB"); }
-}
+async function saveScores() { try { await axios.put(DB_URL, db); } catch (e) {} }
 
-// الإعدادات (الشكل)
 let settings = {
-    winText: "WIN", lossText: "LOSS",
-    winColor: "#00FFFF", lossColor: "#FF0055",
+    winText: "WIN", lossText: "LOSS", winColor: "#00FFFF", lossColor: "#FF0055",
     bgColor: "#000000", labelColor: "#CCCCCC", numColor: "#FFFFFF",
-    width: 200, height: 50, gap: 15,
-    fontFamily: "'Cairo', sans-serif",
-    labelSize: 30, numSize: 35,
-    layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
+    width: 200, height: 50, gap: 15, fontFamily: "'Cairo', sans-serif",
+    labelSize: 30, numSize: 35, layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
 };
 
-io.on("connection", (socket) => {
-    // نرسل للمتصل بيانات الطور الحالي فقط
-    emitUpdate(socket);
-    socket.emit("update_settings", settings);
-    socket.on("save_settings", (newSettings) => {
-        settings = newSettings;
-        io.emit("update_settings", settings);
-    });
-});
+// دالة مساعدة لإنشاء المؤشرات (Indicators)
+function getResponseData(eventType) {
+    const current = db.modes[db.activeMode];
+    
+    // هنا السحر: نرسل علامة خاصة للطور المفعل
+    const indicators = {
+        "i_1v1": db.activeMode === "1v1" ? "🟢 1v1" : "1v1", // إذا مفعل يضع دائرة خضراء
+        "i_2v2": db.activeMode === "2v2" ? "🟢 2v2" : "2v2",
+        "i_3v3": db.activeMode === "3v3" ? "🟢 3v3" : "3v3",
+        "i_4v4": db.activeMode === "4v4" ? "🟢 4v4" : "4v4"
+    };
 
-// دالة مساعدة لإرسال البيانات الصحيحة
-function emitUpdate(socket = io) {
-    const currentData = db.modes[db.activeMode];
-    // نرسل البيانات + اسم الطور الحالي
-    socket.emit("update_scores", { 
-        ...currentData, 
-        mode: db.activeMode, 
-        event: "sync" 
-    });
+    return { ...current, mode: db.activeMode, indicators: indicators, event: eventType };
 }
+
+io.on("connection", (socket) => {
+    socket.emit("update_scores", getResponseData("sync"));
+    socket.emit("update_settings", settings);
+    socket.on("save_settings", (newSettings) => { settings = newSettings; io.emit("update_settings", settings); });
+});
 
 app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
 
@@ -82,18 +66,12 @@ app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
     
-    // نحدد أي بيانات نعدل عليها بناءً على الطور النشط
     let current = db.modes[db.activeMode];
 
-    // 1. تغيير الطور (Game Mode Switch)
     if (action.startsWith("set_mode_")) {
-        const newMode = action.replace("set_mode_", ""); // e.g., 2v2
-        if (db.modes[newMode]) {
-            db.activeMode = newMode;
-            eventType = "mode_change"; // حدث خاص لتغيير الطور
-        }
+        const newMode = action.replace("set_mode_", "");
+        if (db.modes[newMode]) { db.activeMode = newMode; eventType = "mode_change"; }
     }
-    // 2. تعديل النتائج (يعدل الطور النشط فقط)
     else if (action === "win_inc") {
         current.win++;
         if (current.win > current.rec_win) { current.rec_win = current.win; eventType = "win_record"; }
@@ -109,22 +87,12 @@ app.get("/api/set", (req, res) => {
 
     saveScores();
 
-    // نرسل التحديث للجميع (OBS + StreamDeck)
-    // نرسل بيانات الطور النشط حالياً
-    io.emit("update_scores", { 
-        ...db.modes[db.activeMode], 
-        mode: db.activeMode, 
-        event: eventType 
-    });
-    
-    // رد للستريم ديك (نعطيه بيانات الطور النشط)
-    res.json({ ...db.modes[db.activeMode], activeMode: db.activeMode });
+    const responseData = getResponseData(eventType);
+    io.emit("update_scores", responseData);
+    res.json(responseData);
 });
 
-// قراءة البيانات (يعيد بيانات الطور النشط)
-app.get("/api/get", (req, res) => { 
-    res.json({ ...db.modes[db.activeMode], activeMode: db.activeMode }); 
-});
+app.get("/api/get", (req, res) => { res.json(getResponseData("sync")); });
 
 const port = process.env.PORT || 3000;
 http.listen(port, () => { console.log("Server running on port " + port); });
