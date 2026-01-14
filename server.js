@@ -9,7 +9,7 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// 🔴 رابط قاعدة البيانات (JSONBlob) - تأكد أنه الرابط الصحيح
+// 🔴 رابط قاعدة البيانات (JSONBlob)
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
 
 let db = {
@@ -22,7 +22,9 @@ let db = {
     }
 };
 
-// تحميل البيانات
+// قائمة الترتيب للتبديل
+const modeOrder = ["1v1", "2v2", "3v3", "4v4"];
+
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
@@ -40,16 +42,9 @@ let settings = {
     labelSize: 30, numSize: 35, layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5
 };
 
-// إعداد بيانات الرد (مع المؤشرات)
 function getResponseData(eventType) {
     const current = db.modes[db.activeMode];
-    const indicators = {
-        "i_1v1": db.activeMode === "1v1" ? "🟢 1v1" : "1v1",
-        "i_2v2": db.activeMode === "2v2" ? "🟢 2v2" : "2v2",
-        "i_3v3": db.activeMode === "3v3" ? "🟢 3v3" : "3v3",
-        "i_4v4": db.activeMode === "4v4" ? "🟢 4v4" : "4v4"
-    };
-    return { ...current, mode: db.activeMode, indicators: indicators, event: eventType };
+    return { ...current, mode: db.activeMode, event: eventType };
 }
 
 io.on("connection", (socket) => {
@@ -64,9 +59,18 @@ app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
     
-    // التعامل مع الأطوار المحددة (Specific Mode Actions)
-    if (action.startsWith("reset_score_")) {
-        const targetMode = action.replace("reset_score_", ""); // e.g., "1v1"
+    // --- منطق الزر الواحد (Cycle Mode) ---
+    if (action === "next_mode") {
+        // نحدد موقع الطور الحالي في القائمة
+        let currentIndex = modeOrder.indexOf(db.activeMode);
+        // ننتقل للذي بعده (وإذا وصلنا للنهاية نعود للأول)
+        let nextIndex = (currentIndex + 1) % modeOrder.length;
+        db.activeMode = modeOrder[nextIndex];
+        eventType = "mode_change";
+    }
+    // --- باقي الأوامر ---
+    else if (action.startsWith("reset_score_")) {
+        const targetMode = action.replace("reset_score_", "");
         if (db.modes[targetMode]) {
             db.modes[targetMode].win = 0;
             db.modes[targetMode].loss = 0;
@@ -84,7 +88,6 @@ app.get("/api/set", (req, res) => {
         const newMode = action.replace("set_mode_", "");
         if (db.modes[newMode]) { db.activeMode = newMode; eventType = "mode_change"; }
     }
-    // التعامل مع الطور النشط حالياً (Active Mode Actions)
     else {
         let current = db.modes[db.activeMode];
         if (action === "win_inc") {
