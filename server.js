@@ -9,10 +9,9 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// 🔴 رابط قاعدة البيانات الخاص بك
+// 🔴 رابط قاعدة البيانات (JSONBlob)
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
 
-// هيكل البيانات (4 أطوار)
 let db = {
     activeMode: "1v1",
     modes: {
@@ -25,59 +24,65 @@ let db = {
 
 const modeOrder = ["1v1", "2v2", "3v3", "4v4"];
 
-// تحميل البيانات عند البدء
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
         if (res.data && res.data.modes) db = res.data;
-        console.log("✅ DB Loaded");
-    } catch (e) { console.error("❌ Error loading DB"); }
+    } catch (e) { console.error("Error loading DB"); }
 }
 loadScores();
 
-// حفظ البيانات
 async function saveScores() { try { await axios.put(DB_URL, db); } catch (e) {} }
 
-// الإعدادات الافتراضية
 let settings = {
-    winText: "WIN", lossText: "LOSS",
-    winColor: "#00FFFF", lossColor: "#FF0055",
+    winText: "WIN", lossText: "LOSS", winColor: "#00FFFF", lossColor: "#FF0055",
     bgColor: "#000000", labelColor: "#CCCCCC", numColor: "#FFFFFF",
-    width: 200, height: 50, gap: 15,
-    fontFamily: "'Cairo', sans-serif",
-    labelSize: 30, numSize: 35,
-    layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
-    showMode: true // خيار إظهار/إخفاء الطور
+    width: 200, height: 50, gap: 15, fontFamily: "'Cairo', sans-serif",
+    labelSize: 30, numSize: 35, layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
+    showMode: true
 };
 
+// دالة تجهيز البيانات (تم تحديثها لحساب المجموع الكلي)
 function getResponseData(eventType) {
     const current = db.modes[db.activeMode];
-    return { ...current, mode: db.activeMode, event: eventType };
+    
+    // 🔥 حساب المجموع الكلي لكل الأطوار
+    let totalWin = 0;
+    let totalLoss = 0;
+    Object.values(db.modes).forEach(m => {
+        totalWin += (m.win || 0);
+        totalLoss += (m.loss || 0);
+    });
+
+    return { 
+        ...current, 
+        mode: db.activeMode, 
+        event: eventType,
+        // إرسال المجموع الكلي وبيانات كل الأطوار
+        totals: { win: totalWin, loss: totalLoss },
+        allModes: db.modes 
+    };
 }
 
 io.on("connection", (socket) => {
     socket.emit("update_scores", getResponseData("sync"));
     socket.emit("update_settings", settings);
-    socket.on("save_settings", (newSettings) => { 
-        settings = newSettings; 
-        io.emit("update_settings", settings); 
-    });
+    socket.on("save_settings", (newSettings) => { settings = newSettings; io.emit("update_settings", settings); });
 });
 
 app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
+app.get("/end", (req, res) => { res.sendFile(path.join(__dirname, '/EndStream.html')); }); // توجيه للصفحة الجديدة
 
 app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
     
-    // 1. التبديل الدوري (Cycle)
     if (action === "next_mode") {
         let currentIndex = modeOrder.indexOf(db.activeMode);
         let nextIndex = (currentIndex + 1) % modeOrder.length;
         db.activeMode = modeOrder[nextIndex];
         eventType = "mode_change";
     }
-    // 2. تصفير خاص (Reset Specific)
     else if (action.startsWith("reset_score_")) {
         const targetMode = action.replace("reset_score_", "");
         if (db.modes[targetMode]) {
@@ -93,12 +98,10 @@ app.get("/api/set", (req, res) => {
             db.modes[targetMode].rec_loss = 0;
         }
     }
-    // 3. تفعيل طور محدد
     else if (action.startsWith("set_mode_")) {
         const newMode = action.replace("set_mode_", "");
         if (db.modes[newMode]) { db.activeMode = newMode; eventType = "mode_change"; }
     }
-    // 4. التحكم بالنتيجة (الطور النشط)
     else {
         let current = db.modes[db.activeMode];
         if (action === "win_inc") {
