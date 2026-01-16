@@ -9,9 +9,10 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// 🔴 رابط قاعدة البيانات (JSONBlob)
+// 🔴 رابط قاعدة البيانات الخاص بك
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
 
+// هيكل البيانات (4 أطوار)
 let db = {
     activeMode: "1v1",
     modes: {
@@ -24,42 +25,53 @@ let db = {
 
 const modeOrder = ["1v1", "2v2", "3v3", "4v4"];
 
+// تحميل البيانات عند البدء
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
         if (res.data && res.data.modes) db = res.data;
-    } catch (e) { console.error("Error loading DB"); }
+        console.log("✅ DB Loaded");
+    } catch (e) { console.error("❌ Error loading DB"); }
 }
 loadScores();
 
+// حفظ البيانات
 async function saveScores() { try { await axios.put(DB_URL, db); } catch (e) {} }
 
+// الإعدادات الافتراضية
 let settings = {
-    winText: "WIN", lossText: "LOSS", winColor: "#00FFFF", lossColor: "#FF0055",
+    winText: "WIN", lossText: "LOSS",
+    winColor: "#00FFFF", lossColor: "#FF0055",
     bgColor: "#000000", labelColor: "#CCCCCC", numColor: "#FFFFFF",
-    width: 200, height: 50, gap: 15, fontFamily: "'Cairo', sans-serif",
-    labelSize: 30, numSize: 35, layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
+    width: 200, height: 50, gap: 15,
+    fontFamily: "'Cairo', sans-serif",
+    labelSize: 30, numSize: 35,
+    layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
     showMode: true
 };
 
-// دالة تجهيز البيانات (تم تحديثها لحساب المجموع الكلي)
+// 🔥 الدالة المهمة: تجهيز البيانات وحساب المجموع
 function getResponseData(eventType) {
     const current = db.modes[db.activeMode];
     
-    // 🔥 حساب المجموع الكلي لكل الأطوار
+    // ➕ عملية الجمع (هذا هو الجزء الذي كان ناقصاً ويسبب الأصفار)
     let totalWin = 0;
     let totalLoss = 0;
-    Object.values(db.modes).forEach(m => {
-        totalWin += (m.win || 0);
-        totalLoss += (m.loss || 0);
-    });
+    
+    // نمر على جميع الأطوار ونجمع نقاطها
+    if (db.modes) {
+        Object.values(db.modes).forEach(m => {
+            totalWin += (parseInt(m.win) || 0);
+            totalLoss += (parseInt(m.loss) || 0);
+        });
+    }
 
     return { 
         ...current, 
         mode: db.activeMode, 
         event: eventType,
-        // إرسال المجموع الكلي وبيانات كل الأطوار
-        totals: { win: totalWin, loss: totalLoss },
+        // إرسال المجموع لصفحة النهاية
+        totals: { win: totalWin, loss: totalLoss }, 
         allModes: db.modes 
     };
 }
@@ -67,12 +79,17 @@ function getResponseData(eventType) {
 io.on("connection", (socket) => {
     socket.emit("update_scores", getResponseData("sync"));
     socket.emit("update_settings", settings);
-    socket.on("save_settings", (newSettings) => { settings = newSettings; io.emit("update_settings", settings); });
+    socket.on("save_settings", (newSettings) => { 
+        settings = newSettings; 
+        io.emit("update_settings", settings); 
+    });
 });
 
+// التوجيه للصفحات
 app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
-app.get("/end", (req, res) => { res.sendFile(path.join(__dirname, '/EndStream.html')); }); // توجيه للصفحة الجديدة
+app.get("/end", (req, res) => { res.sendFile(path.join(__dirname, '/EndStream.html')); });
 
+// API التحكم
 app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
