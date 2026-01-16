@@ -9,11 +9,24 @@ const axios = require('axios');
 app.use(cors());
 app.use(express.json());
 
-// 🔴 رابط قاعدة البيانات الخاص بك
+// 🔴 رابط قاعدة البيانات
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
 
-// هيكل البيانات (4 أطوار)
+// الإعدادات الافتراضية (لأول تشغيل فقط)
+const defaultSettings = {
+    winText: "WIN", lossText: "LOSS",
+    winColor: "#00FFFF", lossColor: "#FF0055",
+    bgColor: "#000000", labelColor: "#CCCCCC", numColor: "#FFFFFF",
+    width: 200, height: 50, gap: 15,
+    fontFamily: "'Cairo', sans-serif",
+    labelSize: 30, numSize: 35,
+    layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
+    showMode: true // الافتراضي
+};
+
+// هيكل البيانات (أضفنا settings هنا ليتم حفظها)
 let db = {
+    settings: defaultSettings,
     activeMode: "1v1",
     modes: {
         "1v1": { win: 0, loss: 0, rec_win: 0, rec_loss: 0 },
@@ -25,52 +38,42 @@ let db = {
 
 const modeOrder = ["1v1", "2v2", "3v3", "4v4"];
 
-// تحميل البيانات عند البدء
+// تحميل البيانات والإعدادات
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
-        if (res.data && res.data.modes) db = res.data;
+        if (res.data) {
+            // دمج البيانات المحفوظة مع الهيكل الحالي
+            db = { ...db, ...res.data };
+            // التأكد من تحميل الإعدادات المحفوظة
+            if (db.settings) {
+                console.log("✅ Settings Loaded from DB");
+            } else {
+                db.settings = defaultSettings;
+            }
+        }
         console.log("✅ DB Loaded");
     } catch (e) { console.error("❌ Error loading DB"); }
 }
 loadScores();
 
-// حفظ البيانات
+// حفظ البيانات والإعدادات معاً
 async function saveScores() { try { await axios.put(DB_URL, db); } catch (e) {} }
 
-// الإعدادات الافتراضية
-let settings = {
-    winText: "WIN", lossText: "LOSS",
-    winColor: "#00FFFF", lossColor: "#FF0055",
-    bgColor: "#000000", labelColor: "#CCCCCC", numColor: "#FFFFFF",
-    width: 200, height: 50, gap: 15,
-    fontFamily: "'Cairo', sans-serif",
-    labelSize: 30, numSize: 35,
-    layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
-    showMode: true
-};
-
-// 🔥 الدالة المهمة: تجهيز البيانات وحساب المجموع
 function getResponseData(eventType) {
     const current = db.modes[db.activeMode];
-    
-    // ➕ عملية الجمع (هذا هو الجزء الذي كان ناقصاً ويسبب الأصفار)
     let totalWin = 0;
     let totalLoss = 0;
-    
-    // نمر على جميع الأطوار ونجمع نقاطها
     if (db.modes) {
         Object.values(db.modes).forEach(m => {
             totalWin += (parseInt(m.win) || 0);
             totalLoss += (parseInt(m.loss) || 0);
         });
     }
-
     return { 
         ...current, 
         mode: db.activeMode, 
         event: eventType,
-        // إرسال المجموع لصفحة النهاية
         totals: { win: totalWin, loss: totalLoss }, 
         allModes: db.modes 
     };
@@ -78,18 +81,19 @@ function getResponseData(eventType) {
 
 io.on("connection", (socket) => {
     socket.emit("update_scores", getResponseData("sync"));
-    socket.emit("update_settings", settings);
+    // نرسل الإعدادات المحفوظة في قاعدة البيانات بدلاً من الافتراضية
+    socket.emit("update_settings", db.settings);
+
     socket.on("save_settings", (newSettings) => { 
-        settings = newSettings; 
-        io.emit("update_settings", settings); 
+        db.settings = newSettings; // تحديث الإعدادات في الذاكرة
+        saveScores(); // حفظها في قاعدة البيانات فوراً
+        io.emit("update_settings", db.settings); 
     });
 });
 
-// التوجيه للصفحات
 app.get("/admin", (req, res) => { res.sendFile(path.join(__dirname, '/admin.html')); });
 app.get("/end", (req, res) => { res.sendFile(path.join(__dirname, '/EndStream.html')); });
 
-// API التحكم
 app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
