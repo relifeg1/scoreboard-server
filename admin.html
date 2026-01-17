@@ -31,6 +31,16 @@
         input[type="text"] { width: 120px; }
         input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; accent-color: #00eaff; }
         .btn-save { background: #00eaff; color: #000; width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        
+        /* 🔥 زر التصفير الشامل */
+        .btn-global-reset {
+            background: #2a1a1a; color: #ff4444; border: 2px solid #ff4444;
+            width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px;
+            font-weight: bold; cursor: pointer; text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        .btn-global-reset:hover { background: #ff4444; color: white; }
+
         #status { text-align: center; margin-top: 15px; font-size: 12px; color: #666; }
     </style>
 </head>
@@ -52,9 +62,14 @@
         <div class="section-title">🛠️ Mode Manager</div>
         <div id="modesContainer"></div>
 
+        <div class="section-title">⚠️ GLOBAL ACTIONS</div>
+        <button class="btn-global-reset" onclick="api('reset_all_scores')">
+            ☢️ RESET ALL SCORES (1v1...4v4)
+        </button>
+
         <div class="section-title">🎨 Design & Style</div>
         <div class="group" style="background: #252525; padding: 10px; border-radius: 5px;">
-            <label style="color: white; font-weight: bold;">Show Mode Badge (e.g. 1v1)</label>
+            <label style="color: white; font-weight: bold;">Show Mode Badge</label>
             <input type="checkbox" id="showMode">
         </div>
 
@@ -140,8 +155,11 @@
 
         function api(action) {
             let confirmMsg = "Confirm action?";
-            if(action.includes("reset_score")) confirmMsg = "Reset score to 0-0 for this mode?";
-            if(action.includes("reset_rank")) confirmMsg = "Reset RECORD/RANK for this mode?";
+            // 🔥 رسالة تأكيد خاصة للتصفير الجماعي
+            if (action === "reset_all_scores") confirmMsg = "⚠️ WARNING: This will reset scores (0-0) for ALL modes (1v1, 2v2, 3v3, 4v4). Records will stay. Are you sure?";
+            else if(action.includes("reset_score")) confirmMsg = "Reset score to 0-0 for this mode?";
+            else if(action.includes("reset_rank")) confirmMsg = "Reset RECORD/RANK for this mode?";
+            
             if(!action.includes("set_mode")) { if(!confirm(confirmMsg)) return; }
             fetch(`/api/set?action=${action}`);
         }
