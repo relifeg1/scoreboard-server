@@ -12,7 +12,7 @@ app.use(express.json());
 // 🔴 رابط قاعدة البيانات
 const DB_URL = "https://jsonblob.com/api/jsonBlob/019bbd06-de27-7fe5-8fb5-8ff7e9d5563a";
 
-// الإعدادات الافتراضية (لأول تشغيل فقط)
+// الإعدادات الافتراضية
 const defaultSettings = {
     winText: "WIN", lossText: "LOSS",
     winColor: "#00FFFF", lossColor: "#FF0055",
@@ -21,10 +21,9 @@ const defaultSettings = {
     fontFamily: "'Cairo', sans-serif",
     labelSize: 30, numSize: 35,
     layout: "row", borderWidth: 4, borderRadius: 6, shadowOpacity: 0.5,
-    showMode: true // الافتراضي
+    showMode: true
 };
 
-// هيكل البيانات (أضفنا settings هنا ليتم حفظها)
 let db = {
     settings: defaultSettings,
     activeMode: "1v1",
@@ -38,26 +37,18 @@ let db = {
 
 const modeOrder = ["1v1", "2v2", "3v3", "4v4"];
 
-// تحميل البيانات والإعدادات
 async function loadScores() {
     try {
         const res = await axios.get(DB_URL);
         if (res.data) {
-            // دمج البيانات المحفوظة مع الهيكل الحالي
             db = { ...db, ...res.data };
-            // التأكد من تحميل الإعدادات المحفوظة
-            if (db.settings) {
-                console.log("✅ Settings Loaded from DB");
-            } else {
-                db.settings = defaultSettings;
-            }
+            if (!db.settings) db.settings = defaultSettings;
         }
         console.log("✅ DB Loaded");
     } catch (e) { console.error("❌ Error loading DB"); }
 }
 loadScores();
 
-// حفظ البيانات والإعدادات معاً
 async function saveScores() { try { await axios.put(DB_URL, db); } catch (e) {} }
 
 function getResponseData(eventType) {
@@ -81,12 +72,10 @@ function getResponseData(eventType) {
 
 io.on("connection", (socket) => {
     socket.emit("update_scores", getResponseData("sync"));
-    // نرسل الإعدادات المحفوظة في قاعدة البيانات بدلاً من الافتراضية
     socket.emit("update_settings", db.settings);
-
     socket.on("save_settings", (newSettings) => { 
-        db.settings = newSettings; // تحديث الإعدادات في الذاكرة
-        saveScores(); // حفظها في قاعدة البيانات فوراً
+        db.settings = newSettings; 
+        saveScores(); 
         io.emit("update_settings", db.settings); 
     });
 });
@@ -98,7 +87,16 @@ app.get("/api/set", (req, res) => {
     const action = req.query.action;
     let eventType = "update";
     
-    if (action === "next_mode") {
+    // 🔥 الأمر الجديد: تصفير شامل
+    if (action === "reset_all_scores") {
+        Object.keys(db.modes).forEach(key => {
+            db.modes[key].win = 0;
+            db.modes[key].loss = 0;
+            // لا نلمس الرانك (rec_win/rec_loss)
+        });
+        eventType = "reset";
+    }
+    else if (action === "next_mode") {
         let currentIndex = modeOrder.indexOf(db.activeMode);
         let nextIndex = (currentIndex + 1) % modeOrder.length;
         db.activeMode = modeOrder[nextIndex];
